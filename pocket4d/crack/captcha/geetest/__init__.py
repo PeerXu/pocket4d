@@ -126,8 +126,14 @@ def crack(driver, init_offset=None):
     except TimeoutException:
         return False
 
+    start_at = time.time()
+
     while True:
         cracked = False
+
+        if time.time() - start_at > 15:
+            break
+
         try:
             ensure_geetest_code_crackable(driver)
         except TimeoutException:
