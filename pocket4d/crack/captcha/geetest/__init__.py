@@ -120,7 +120,7 @@ def noise_offset():
     return int(np.random.rand() * 10 - 3)
 
 
-def crack(driver, init_offset=30):
+def crack(driver, init_offset=None):
     try:
         ensure_geetest_code(driver)
     except TimeoutException:
@@ -141,7 +141,7 @@ def crack(driver, init_offset=30):
         time.sleep(0.3)
 
         current_direction = 1
-        offset = init_offset
+        offset = init_offset if init_offset else 30 + int(np.random.normal(20, 15))
 
         while True:
             next_direction, ok = predictor.predict_direction()
