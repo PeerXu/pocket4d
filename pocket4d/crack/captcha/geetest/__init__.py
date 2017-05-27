@@ -126,13 +126,8 @@ def crack(driver, init_offset=None):
     except TimeoutException:
         return False
 
-    start_at = time.time()
-
     while True:
         cracked = False
-
-        if time.time() - start_at > 15:
-            break
 
         try:
             ensure_geetest_code_crackable(driver)
@@ -149,7 +144,11 @@ def crack(driver, init_offset=None):
         current_direction = 1
         offset = init_offset if init_offset else 30 + int(np.random.normal(20, 15))
 
+        start_at = time.time()
         while True:
+            if time.time() - start_at > 15:
+                break
+
             next_direction, ok = predictor.predict_direction()
             if not ok:
                 ActionChains(driver).release(on_element=geetest_slider_element).perform()
