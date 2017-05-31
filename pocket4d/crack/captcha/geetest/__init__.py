@@ -46,24 +46,25 @@ def reload_geetest_code(driver):
 
 
 class GeetestRectPredictor(object):
-    CONTOUR_MIN_X_OFFSET = 5
+    CONTOUR_MAX_X_OFFSET = 3
 
     CONTOUR_X_RANGE = 2
 
-    def __init__(self, driver):
+    def __init__(self, driver, max_switch_times=4, init_offset=None):
         self._driver = driver
 
         self._background = None
         self._mode = 0
 
-        self._rect1_min_x = None
         self._rect1_max_x = None
+        self._max_switch_direction_times = max_switch_times * 2
+        self._switch_direction_times = 0
+
+        self._current_direction = 1
+        self._current_offset = init_offset if init_offset else 30 + int(np.random.normal(20, 15))
 
     def _get_geetest_screen_element(self):
         return self._driver.find_element_by_class_name('gt_cut_fullbg')
-
-    def _min_x(self, points):
-        return min([p[0] for p in points])
 
     def _max_x(self, points):
         return max([p[0] for p in points])
@@ -81,39 +82,41 @@ class GeetestRectPredictor(object):
         diff_cv = shadow_filter(diff_cv)
         contours = p4d_image.findContours(diff_cv)
 
-        if self._mode == 0:
-            if len(contours) != 2:
-                return 0, False
+        if len(contours) > 2:
+            return 0, False
 
-            self._rect1_min_x = self._min_x(contours[1])
-            self._rect1_max_x = self._max_x(contours[1])
+        if self._mode == 0:
+            self._rect1_max_x = self._max_x(contours[-1])
             self._mode = 1
 
             return 1, True
 
         if self._mode == 1:
-            if len(contours) > 2 or len(contours) == 0:
-                return 0, False
+            max_x = self._max_x(contours[-1])
+            if max_x > self._rect1_max_x + self.CONTOUR_MAX_X_OFFSET:
+                return -1, True
 
-            if len(contours) == 2:
-                return 1, True
-
-            if len(contours) == 1:
-                min_x = self._min_x(contours[0])
-                max_x = self._max_x(contours[0])
-
-                if min_x + self.CONTOUR_MIN_X_OFFSET < self._rect1_min_x - self.CONTOUR_X_RANGE:
-                    return 1, True
-
-                if self._rect1_min_x - self.CONTOUR_X_RANGE <= min_x + self.CONTOUR_MIN_X_OFFSET <= self._rect1_min_x + self.CONTOUR_X_RANGE:
-                    return 0, True
-
-                if max_x > self._rect1_max_x:
-                    return -1, True
-
-                return 0, False
+            return 1, True
 
         return 0, False
+
+    def next_step(self):
+        next_direction, ok = self.predict_direction()
+        if not ok:
+            return (0, 0), False
+
+        if next_direction != self._current_direction:
+            self._switch_direction_times += 1
+            self._current_direction = next_direction
+            self._current_offset = self._current_offset / 2
+
+            if self._current_offset == 0 or self._switch_direction_times == self._max_switch_direction_times:
+                return (0, 0), True
+
+        xoffset = 20 + self._current_direction * self._current_offset + noise_offset()
+        yoffset = 20 + noise_offset()
+
+        return (xoffset, yoffset), True
 
 
 def noise_offset():
@@ -149,24 +152,12 @@ def crack(driver, init_offset=None):
             if time.time() - start_at > 15:
                 break
 
-            next_direction, ok = predictor.predict_direction()
-            if not ok:
+            (xoffset, yoffset), ok = predictor.next_step()
+            if not ok or xoffset == 0:
                 ActionChains(driver).release(on_element=geetest_slider_element).perform()
                 break
 
-            if next_direction != current_direction:
-                offset = int(offset/2.0)
-
-            current_direction = next_direction
-
-            if current_direction == 0 or offset == 0:
-                ActionChains(driver).release(on_element=geetest_slider_element).perform()
-                break
-
-            xoffset = 20 + current_direction * offset + noise_offset()
-            yoffset = 20 + noise_offset()
             ActionChains(driver).move_to_element_with_offset(to_element=geetest_slider_element, xoffset=xoffset, yoffset=yoffset).perform()
-
         try:
             ensure_geetest_crack_success(driver)
             cracked = True
